@@ -1,0 +1,180 @@
+version: "3.8"
+
+services:
+  eureka-server:
+    image: eureka:latest
+    build: ./eureka-server
+    restart: on-failure
+    ports:
+      - 8761:8761
+    environment:
+      SPRING_APPLICATION_JSON: '{
+          "server.port"  : "8761",
+          "eureka.client.register-with-eureka" : "false",
+          "eureka.client.fetch-registry" : "false"
+        }'
+
+  customerdb:
+    image: mysql:5.7
+    restart: unless-stopped
+    ports:
+      - 3309:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=root1234
+      - MYSQL_DATABASE=customerDB
+  customer-service:
+    depends_on:
+      - customerdb
+      - eureka-server
+    build: ./customer-service
+    restart: on-failure
+    ports:
+      - 6868:8080
+    environment:
+      SPRING_APPLICATION_JSON: '{
+        "eureka.client.serviceUrl.defaultZone" : "$EUREKA_SERVER",
+        "spring.application.name"  : "customerservice",
+        "spring.datasource.url"  : "jdbc:mysql://customerdb:3306/customerDB?useSSL=false",
+        "spring.datasource.username" : "root",
+        "spring.datasource.password" : "root1234",
+        "spring.jpa.properties.hibernate.dialect" : "org.hibernate.dialect.MySQL5InnoDBDialect",
+        "spring.jpa.hibernate.ddl-auto" : "update",
+        "server.port" : "8080"
+      }'
+    volumes:
+      - .m2:/root/.m2
+    stdin_open: true
+    tty: true
+
+  driverdb:
+    image: mysql:5.7
+    restart: unless-stopped
+    ports:
+      - 3308:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=root1234
+      - MYSQL_DATABASE=driverDB
+  driver-service:
+    depends_on:
+      - driverdb
+      - eureka-server
+    build: ./driver-service
+    restart: on-failure
+    ports:
+      - 6869:8080
+    environment:
+      SPRING_APPLICATION_JSON: '{
+        "eureka.client.serviceUrl.defaultZone" : "$EUREKA_SERVER",
+        "spring.application.name"  : "driverservice",
+        "spring.datasource.url"  : "jdbc:mysql://driverdb:3306/driverDB?useSSL=false",
+        "spring.datasource.username" : "root",
+        "spring.datasource.password" : "root1234",
+        "spring.jpa.properties.hibernate.dialect" : "org.hibernate.dialect.MySQL5InnoDBDialect",
+        "spring.jpa.hibernate.ddl-auto" : "update",
+        "server.port" : "8080"
+      }'
+    volumes:
+      - .m2:/root/.m2
+    stdin_open: true
+    tty: true
+
+  orderdb:
+    image: mysql:5.7
+    restart: unless-stopped
+    ports:
+      - 3310:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=root1234
+      - MYSQL_DATABASE=orderDB
+  order-service:
+    env_file:
+      - ./.env
+    depends_on:
+      - orderdb
+      - eureka-server
+      - kafka
+    build: ./order-service
+    restart: on-failure
+    ports:
+      - 6870:8080
+    environment:
+      SPRING_APPLICATION_JSON: '{
+        "eureka.client.serviceUrl.defaultZone" : "$EUREKA_SERVER",
+        "spring.kafka.bootstrap-servers" : "$KAFKA_SERVER",
+        "spring.application.name"  : "orderservice",
+        "spring.datasource.url"  : "jdbc:mysql://orderdb:3306/orderDB?useSSL=false",
+        "spring.datasource.username" : "root",
+        "spring.datasource.password" : "root1234",
+        "spring.jpa.properties.hibernate.dialect" : "org.hibernate.dialect.MySQL5InnoDBDialect",
+        "spring.jpa.hibernate.ddl-auto" : "update",
+        "server.port" : "8080"
+      }'
+    volumes:
+      - .m2:/root/.m2
+    stdin_open: true
+    tty: true
+
+  orderhistorydb:
+    image: mysql:5.7
+    restart: unless-stopped
+    ports:
+      - 3307:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=root1234
+      - MYSQL_DATABASE=orderhistoryDB
+  order-history-service:
+    depends_on:
+      - orderdb
+      - kafka
+    build: ./order-history-service
+    restart: on-failure
+    ports:
+      - 6871:8080
+    environment:
+      SPRING_APPLICATION_JSON: '{
+        "eureka.client.serviceUrl.defaultZone" : "$EUREKA_SERVER",
+        "spring.kafka.bootstrap-servers" : "$KAFKA_SERVER",
+        "spring.kafka.consumer.group-id" : "app.1",
+        "spring.application.name"  : "orderhistoryservice",
+        "spring.datasource.url"  : "jdbc:mysql://orderhistorydb:3306/orderhistoryDB?useSSL=false",
+        "spring.datasource.username" : "root",
+        "spring.datasource.password" : "root1234",
+        "spring.jpa.properties.hibernate.dialect" : "org.hibernate.dialect.MySQL5InnoDBDialect",
+        "spring.jpa.hibernate.ddl-auto" : "update",
+        "server.port" : "8080"
+      }'
+    volumes:
+      - .m2:/root/.m2
+    stdin_open: true
+    tty: true
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 22181:2181
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - 29092:29092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+
+
+
+
+
+#networks:
+#  app-network:
+#    driver: brige
